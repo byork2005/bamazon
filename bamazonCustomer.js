@@ -1,20 +1,116 @@
 var inquire = require("inquirer");
-var database = require("mysql");
+var mysql = require("mysql");
 
-// install mySQL workbench on your home computer. Double check machine ready instructions to ensure there isn't anything special you missed.
-// once installed create the database and tables as instructed. Use the below schema.
+var connection = mysql.createConnection(
+{
+  host: "localhost",
+  port: 3306,
+  user: "root",
+  password: "root",
+  database: "bamazon"
+});
+
+connection.connect(function(err) 
+{
+  if (err) throw err;
+});
+
+console.log("Welcome to Bamazon!\nPlease shop our wares...\n--------------------\n")
+shop();
+
+function shop()
+{
+  inquire.prompt([
+    {
+      name: "shop",
+      message: "Would you like to shop?",
+      type: "confirm"
+    }
+  ]).then(function(answer)
+  {
+    if(answer.shop == true)
+    {
+      displayProducts();
+    } else 
+    {
+      connection.end();
+    }
+  })
+}
+
+function displayProducts()
+{
+  connection.query("SELECT product_name, item_id FROM products", function(err, res)
+  {
+    if(err) throw err;
+    console.log("\n--------------------\n")
+    for(var i = 0; i < res.length; i++)
+    {
+      console.log("Product: " + res[i].product_name + "\nItem Number: " + res[i].item_id + "\n")
+    }
+    console.log("\n--------------------\n")
+    makePurchase();
+  })
+}
+
+function makePurchase()
+{
+  inquire.prompt([
+    {
+      name: "product_selection",
+      message: "What product would you like? (Enter in an Item Number): "
+    },
+    {
+      name: "quantity",
+      message: "Quantity: ",
+      validate: function(input)
+      {
+        return !isNaN(input)
+      }
+    }
+  ]).then(function(answer)
+    {
+      checkStock(answer.product_selection, answer.quantity);
+    })
+}
+
+function checkStock(id, qty)
+{
+  connection.query("SELECT stock_quantity FROM products WHERE ?", {item_id: id}, function(err, res)
+  {
+    if(qty <= res[0].stock_quantity)
+    {
+      var newQty = res[0].stock_quantity - qty;
+      processOrder(id, qty, newQty)
+    } else
+    {
+      console.log("Sorry, we don't have enough stock to fulfill that order.\nPlease change the quantity and try again.\n--------------------\n")
+      shop();
+    }
+  })
+}
+
+function processOrder(id, qty, newQty)
+{
+  connection.query("SELECT price FROM products WHERE ?", {item_id: id}, function(err, res)
+  {
+    var total = res[0].price * qty
+    console.log("Your total price is $" + roundCurrency(total))
+    console.log("\nThank you for ordering!")
+    shop();
+  })
+  connection.query("UPDATE products SET ? WHERE ?", [{stock_quantity: newQty}, {item_id: id}], function(err, res)
+  {
+    console.log(err)
+  })
+}
+
+function roundCurrency(amount)
+{
+    var x = amount * 100
+    x = Math.round(x)
+    x = x/100
+    return x
+}
 
 
-DROP DATABASE IF EXISTS bamazon;
-CREATE DATABASE bamazon;
-
-USE bamazon;
-
-CREATE TABLE products(
-  item_id INT NOT NULL AUTO_INCREMENT,
-  product_name VARCHAR(100) NOT NULL,
-  department_name VARCHAR(100) NOT NULL,
-  price DECIMAL(10,2) NOT NULL,
-  stock_quantity INT NOT NULL,
-  PRIMARY KEY (item_id)
-);
